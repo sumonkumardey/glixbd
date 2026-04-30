@@ -1,0 +1,214 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ------------------------------------------------------------
+    // GLOBAL HELPERS
+    // ------------------------------------------------------------
+    function isSignedIn() { return request.auth != null; }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    
+    // Hardened ID validation
+    function isValidId(id) { 
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); 
+    }
+    
+    // Secure identity checks
+    function isOwner(userId) { 
+      return isSignedIn() && request.auth.uid == userId; 
+    }
+    
+    function getUserData(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data;
+    }
+
+    // Role detection
+    function isHardcodedAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email != null && (
+          request.auth.token.email.lower() == 'oksumondey153@gmail.com' ||
+          request.auth.token.email.lower() == 'sumonkumardey23@gmail.com'
+        )
+      );
+    }
+    
+    function isAdmin() {
+      return isHardcodedAdmin() || (
+        isSignedIn() && (
+          exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+          (request.auth.token.email != null && exists(/databases/$(database)/documents/admin_emails/$(request.auth.token.email.lower())))
+        )
+      );
+    }
+    
+    // Safety check against blocked users
+    function isNotBlocked() {
+      return !isSignedIn() || 
+             !exists(/databases/$(database)/documents/users/$(request.auth.uid)) || 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('isBlocked', false) == false;
+    }
+
+    // ------------------------------------------------------------
+    // DEFAULT DENY
+    // ------------------------------------------------------------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ------------------------------------------------------------
+    // ENTITY VALIDATION BLUEPRINTS
+    // ------------------------------------------------------------
+    
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'name']) &&
+             data.uid is string && data.uid.size() <= 128 &&
+             data.name is string && data.name.size() <= 300 &&
+             (data.uid == request.auth.uid || isAdmin());
+    }
+    
+    function isValidReview(data) {
+      return data.keys().hasAll(['productId', 'userId', 'rating', 'comment']) &&
+             data.productId is string && isValidId(data.productId) &&
+             data.userId == request.auth.uid &&
+             data.rating is number && data.rating >= 1 && data.rating <= 5 &&
+             data.comment is string && data.comment.size() <= 2000;
+    }
+
+    function isValidOrder(data) {
+      return data.keys().hasAll(['orderNumber', 'userId', 'total', 'status', 'items']) &&
+             data.orderNumber is string && data.orderNumber.size() >= 5 &&
+             data.total is number && data.total >= 0 &&
+             (isSignedIn() && data.userId == request.auth.uid || data.userId == 'guest' || isAdmin());
+    }
+
+    // ------------------------------------------------------------
+    // COLLECTION MATCH BLOCKS
+    // ------------------------------------------------------------
+
+    match /admins/{adminId} {
+      allow get: if isOwner(adminId) || isAdmin();
+      allow list: if isSignedIn(); 
+      allow create: if isAdmin();
+      allow update, delete: if isAdmin();
+    }
+
+    match /admin_emails/{email} {
+      allow read, list: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    match /users/{userId} {
+      allow get: if true; 
+      allow list: if (isSignedIn() && (resource.data.get('referralCode', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('referralCode', 'NONE'))) || isAdmin();
+      
+      allow create: if isOwner(userId) && 
+                      incoming().get('uid', '') == userId &&
+                      incoming().get('name', '') is string;
+      
+      allow update: if (isOwner(userId) && (
+        // Protect sensitive fields from being updated by the owner
+        // We allow referralCode to be set IF it was previously missing
+        (!incoming().diff(existing()).affectedKeys().hasAny(['points', 'referralRewardPaid', 'isBlocked', 'createdAt'])) &&
+        // Wallet balance check - users can only deduct or keep same, NEVER increase
+        (incoming().get('walletBalance', 0) <= existing().get('walletBalance', 0)) &&
+        (!incoming().diff(existing()).affectedKeys().hasAny(['referralCode']) || existing().get('referralCode', null) == null) &&
+        (!('uid' in incoming()) || incoming().uid == userId) &&
+        (!incoming().diff(existing()).affectedKeys().hasAny(['updatedAt']) || incoming().updatedAt == request.time) &&
+        (!incoming().diff(existing()).affectedKeys().hasAny(['lastActive']) || incoming().lastActive == request.time)
+      )) || isAdmin();
+      
+      allow delete: if isAdmin() || isOwner(userId);
+
+      match /notifications/{notifId} {
+        allow read, list: if isOwner(userId) || isAdmin();
+        allow create: if isSignedIn(); 
+        allow update: if isOwner(userId) && incoming().diff(existing()).affectedKeys().hasOnly(['isRead']);
+        allow delete: if isOwner(userId) || isAdmin();
+      }
+
+      match /categoryViews/{categoryId} {
+        allow read, list: if isOwner(userId) || isAdmin();
+        allow write: if isOwner(userId);
+      }
+
+      match /wishlist/{wishId} {
+        allow read, list: if isOwner(userId) || isAdmin();
+        allow write: if isOwner(userId);
+      }
+
+      match /walletTransactions/{transactionId} {
+        allow read, list: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId) && (
+          incoming().amount <= 0 || isAdmin()
+        ); 
+        allow update, delete: if isAdmin();
+      }
+    }
+
+    match /withdrawalRequests/{requestId} {
+      allow get: if (isSignedIn() && resource.data.userId == request.auth.uid) || isAdmin();
+      allow list: if (isSignedIn() && resource.data.userId == request.auth.uid) || isAdmin();
+      allow create: if isNotBlocked() && isSignedIn() && incoming().userId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    match /products/{productId} {
+      allow read, list: if true;
+      allow create: if isAdmin();
+      allow update: if isAdmin() || (
+        // Allow anyone (even guests) to update views, and signed in to update counts
+        incoming().diff(existing()).affectedKeys().hasOnly(['views', 'reviewCount', 'rating'])
+      );
+      allow delete: if isAdmin();
+    }
+    
+    match /reviews/{reviewId} {
+      allow read, list: if true;
+      allow create: if isNotBlocked() && isSignedIn() && isValidReview(incoming());
+      allow update: if isAdmin() || (
+        isSignedIn() && (
+          (isOwner(existing().userId) && incoming().diff(existing()).affectedKeys().hasOnly(['comment', 'rating'])) ||
+          (incoming().diff(existing()).affectedKeys().hasOnly(['likesCount'])) ||
+          (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['reply']))
+        )
+      );
+      allow delete: if isOwner(existing().userId) || isAdmin();
+      
+      match /likes/{userId} {
+        allow read, list: if true;
+        allow write: if isSignedIn() && userId == request.auth.uid;
+      }
+    }
+
+    match /orders/{orderId} {
+      allow get: if true; 
+      allow list: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow create: if isNotBlocked() && isValidOrder(incoming());
+      allow update: if isAdmin() || (
+        isOwner(existing().userId) && 
+        incoming().diff(existing()).affectedKeys().hasOnly(['status']) &&
+        existing().status == 'pending' // Only allow cancellation if pending
+      );
+      allow delete: if isAdmin();
+      
+      match /tracking/{trackId} {
+        allow read, list: if true;
+        allow create: if true; 
+      }
+    }
+
+    // Static content
+    match /categories/{categoryId} { allow read, list: if true; allow write: if isAdmin(); }
+    match /settings/{settingId} { allow read, list: if true; allow write: if isAdmin(); }
+    match /banners/{bannerId} { allow read, list: if true; allow write: if isAdmin(); }
+    match /coupons/{couponId} { 
+      allow read, list: if true; 
+      allow write: if isAdmin();
+    }
+
+    // Special test path
+    match /test/connection {
+      allow read: if true;
+    }
+  }
+}

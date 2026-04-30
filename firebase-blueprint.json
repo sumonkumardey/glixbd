@@ -1,0 +1,234 @@
+{
+  "entities": {
+    "Admin": {
+      "title": "Admin",
+      "description": "Administrative user with elevated privileges",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "isSuperAdmin": { "type": "boolean" }
+      },
+      "required": ["email", "createdAt"]
+    },
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "Public and private user profile data",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "phone": { "type": "string" },
+        "address": { "type": "string" },
+        "district": { "type": "string" },
+        "thana": { "type": "string" },
+        "walletBalance": { "type": "number", "default": 0 },
+        "referralCode": { "type": "string" },
+        "referredBy": { "type": "string" },
+        "isBlocked": { "type": "boolean", "default": false },
+        "emailVerified": { "type": "boolean", "default": false },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "name", "email", "phone"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Product categories",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "nameBn": { "type": "string" },
+        "icon": { "type": "string" },
+        "image": { "type": "string" },
+        "sortOrder": { "type": "number" },
+        "parentId": { "type": ["string", "null"] }
+      },
+      "required": ["name", "nameBn", "sortOrder"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "E-commerce product",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "nameBn": { "type": "string" },
+        "price": { "type": "number" },
+        "salePrice": { "type": "number" },
+        "stock": { "type": "number" },
+        "description": { "type": "string" },
+        "images": { "type": "array", "items": { "type": "string" } },
+        "categoryId": { "type": "string" },
+        "isFeatured": { "type": "boolean" },
+        "sizes": { "type": "array", "items": { "type": "string" } },
+        "views": { "type": "number" },
+        "rating": { "type": "number" },
+        "reviewCount": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "nameBn", "price", "stock", "categoryId"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Customer order",
+      "type": "object",
+      "properties": {
+        "orderNumber": { "type": "string" },
+        "userId": { "type": "string" },
+        "items": { "type": "array" },
+        "total": { "type": "number" },
+        "subtotal": { "type": "number" },
+        "deliveryCharge": { "type": "number" },
+        "discount": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "processing", "shipped", "delivered", "cancelled"] },
+        "paymentMethod": { "type": "string" },
+        "shippingAddress": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["orderNumber", "userId", "items", "total", "status"]
+    },
+    "TrackingEvent": {
+      "title": "Tracking Event",
+      "description": "Status update for an order",
+      "type": "object",
+      "properties": {
+        "status": { "type": "string" },
+        "statusBn": { "type": "string" },
+        "message": { "type": "string" },
+        "messageBn": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["status", "createdAt"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "User notification",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string" },
+        "isRead": { "type": "boolean" },
+        "link": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "message", "type", "createdAt"]
+    },
+    "Review": {
+      "title": "Review",
+      "description": "Product review",
+      "type": "object",
+      "properties": {
+        "productId": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "rating": { "type": "number" },
+        "comment": { "type": "string" },
+        "likesCount": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["productId", "userId", "rating", "comment"]
+    },
+    "Coupon": {
+      "title": "Coupon",
+      "description": "Discount coupon",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string" },
+        "type": { "type": "string" },
+        "value": { "type": "number" },
+        "minAmount": { "type": "number" },
+        "isActive": { "type": "boolean" },
+        "usageLimit": { "type": "number" },
+        "usageCount": { "type": "number" }
+      },
+      "required": ["code", "type", "value"]
+    },
+    "Banner": {
+      "title": "Banner",
+      "description": "Promotional banner",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "image": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "sortOrder": { "type": "number" }
+      },
+      "required": ["title", "image", "sortOrder"]
+    },
+    "Settings": {
+      "title": "Settings",
+      "description": "Application settings",
+      "type": "object",
+      "properties": {
+        "bkashNumber": { "type": "string" },
+        "nagadNumber": { "type": "string" },
+        "deliveryChargeInsideDhaka": { "type": "number", "default": 60 },
+        "deliveryChargeOutsideDhaka": { "type": "number", "default": 120 },
+        "referralRewardAmount": { "type": "number", "default": 50 },
+        "referralMinOrderAmount": { "type": "number", "default": 1000 },
+        "minWithdrawalAmount": { "type": "number", "default": 500 },
+        "isCodEnabled": { "type": "boolean" }
+      }
+    },
+    "WalletTransaction": {
+      "title": "Wallet Transaction",
+      "description": "Record of wallet balance change",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "type": { "type": "string", "enum": ["referral_bonus", "purchase", "withdrawal", "refund", "adjustment"] },
+        "amount": { "type": "number" },
+        "description": { "type": "string" },
+        "referenceId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "type", "amount", "createdAt"]
+    },
+    "WithdrawalRequest": {
+      "title": "Withdrawal Request",
+      "description": "User request to withdraw wallet funds",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userPhone": { "type": "string" },
+        "amount": { "type": "number" },
+        "paymentMethod": { "type": "string", "enum": ["bkash", "nagad"] },
+        "accountNumber": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "adminNote": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "processedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "amount", "paymentMethod", "accountNumber", "status", "createdAt"]
+    }
+  },
+  "firestore": {
+    "admins/{adminId}": { "schema": "Admin", "description": "Admin users" },
+    "users/{userId}": { "schema": "UserProfile", "description": "User profiles" },
+    "users/{userId}/notifications/{notificationId}": { "schema": "Notification", "description": "User notifications" },
+    "users/{userId}/walletTransactions/{transactionId}": { "schema": "WalletTransaction", "description": "User wallet history" },
+    "withdrawalRequests/{requestId}": { "schema": "WithdrawalRequest", "description": "Withdrawal requests for admin" },
+    "categories/{categoryId}": { "schema": "Category", "description": "Product categories" },
+    "products/{productId}": { "schema": "Product", "description": "Products" },
+    "orders/{orderId}": { "schema": "Order", "description": "Orders" },
+    "orders/{orderId}/tracking/{trackingId}": { "schema": "TrackingEvent", "description": "Order tracking" },
+    "reviews/{reviewId}": { "schema": "Review", "description": "Product reviews" },
+    "reviews/{reviewId}/likes/{userId}": { "schema": { "type": "object" }, "description": "Review likes" },
+    "coupons/{couponId}": { "schema": "Coupon", "description": "Discount coupons" },
+    "users/{userId}/categoryViews/{categoryId}": {
+      "schema": {
+        "type": "object",
+        "properties": {
+          "categoryId": { "type": "string" },
+          "viewCount": { "type": "number" },
+          "lastViewedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "description": "User's category-specific view history"
+    },
+    "banners/{bannerId}": { "schema": "Banner", "description": "Promotional banners" },
+    "settings/{settingId}": { "schema": "Settings", "description": "App settings" }
+  }
+}

@@ -1,0 +1,94 @@
+@import url('https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@300;400;500;600;700&family=Poppins:wght@300;400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Poppins", "Hind Siliguri", ui-sans-serif, system-ui, sans-serif;
+  --font-bengali: "Hind Siliguri", sans-serif;
+  
+  --color-primary: #E53935;
+  --color-primary-foreground: #FFFFFF;
+  --color-secondary: #FF6F00;
+  --color-secondary-foreground: #FFFFFF;
+  --color-accent: #FB8C00;
+  --color-success: #43A047;
+  --color-error: #D32F2F;
+  --color-background: #F5F5F5;
+  --color-card: #FFFFFF;
+  --color-border: #E0E0E0;
+  --color-text-main: #212121;
+  --color-text-muted: #757575;
+}
+
+@layer base {
+  body {
+    @apply bg-background text-text-main font-sans;
+  }
+}
+
+.font-bengali {
+  font-family: "Hind Siliguri", sans-serif;
+}
+
+.card {
+  @apply bg-white rounded-xl shadow-sm border border-gray-100;
+}
+
+.tracking-step {
+  @apply relative pl-8 pb-8;
+}
+
+.tracking-step::before {
+  content: '';
+  @apply absolute left-[9px] top-[20px] bottom-0 w-0.5 bg-gray-200;
+}
+
+.tracking-step.active::before {
+  @apply bg-success;
+}
+
+.tracking-step:last-child::before {
+  @apply hidden;
+}
+
+.dot {
+  @apply absolute left-0 top-1 w-[20px] h-[20px] rounded-full bg-gray-200 border-4 border-white shadow-sm z-10;
+}
+
+.dot.completed {
+  @apply bg-success;
+}
+
+.dot.pulse {
+  @apply bg-secondary shadow-lg;
+  animation: pulse-anim 2s infinite;
+}
+
+@keyframes pulse-anim {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.2); opacity: 0.7; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes rgb-border {
+  0% { border-color: #ff0000; box-shadow: 0 0 10px rgba(255, 0, 0, 0.5); }
+  25% { border-color: #00ff00; box-shadow: 0 0 10px rgba(0, 255, 0, 0.5); }
+  50% { border-color: #0000ff; box-shadow: 0 0 10px rgba(0, 0, 255, 0.5); }
+  75% { border-color: #ffff00; box-shadow: 0 0 10px rgba(255, 255, 0, 0.5); }
+  100% { border-color: #ff00ff; box-shadow: 0 0 10px rgba(255, 0, 255, 0.5); }
+}
+
+.btn-rgb {
+  @apply relative overflow-hidden transition-all duration-500 border-2;
+  animation: rgb-border 3s linear infinite;
+}
+
+.btn-rgb::after {
+  content: '';
+  @apply absolute inset-0 bg-gradient-to-r from-red-500 via-green-500 to-blue-500 opacity-20 blur-xl;
+  animation: rgb-slide 3s linear infinite;
+}
+
+@keyframes rgb-slide {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
+}
