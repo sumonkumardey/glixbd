@@ -47,7 +47,9 @@ export async function createSteadfastOrder(order: any) {
       })
     });
 
-    const result = await response.json();
+    const text = await response.text();
+    if (!text || text.trim() === "") throw new Error("Empty response from Steadfast API");
+    const result = JSON.parse(text);
 
     if (response.ok && result.status === 200) {
       return {
