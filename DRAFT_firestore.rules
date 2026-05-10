@@ -1,0 +1,183 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ------------------------------------------------------------
+    // GLOBAL HELPERS
+    // ------------------------------------------------------------
+    function isSignedIn() { return request.auth != null; }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    
+    // Hardened ID validation
+    function isValidId(id) { 
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); 
+    }
+    
+    // Secure identity checks
+    function isOwner(userId) { 
+      return isSignedIn() && request.auth.uid == userId; 
+    }
+    
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    // Role detection
+    function isHardcodedAdmin() {
+      return isEmailVerified() && (
+        request.auth.token.email.lower() == 'oksumondey153@gmail.com'
+      );
+    }
+    
+    function isAdmin() {
+      return isHardcodedAdmin() || (
+        isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+    
+    // Safety check against blocked users
+    function isNotBlocked() {
+      return !isSignedIn() || 
+             !exists(/databases/$(database)/documents/users/$(request.auth.uid)) || 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('isBlocked', false) == false;
+    }
+
+    // ------------------------------------------------------------
+    // DEFAULT DENY
+    // ------------------------------------------------------------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ------------------------------------------------------------
+    // ENTITY VALIDATION BLUEPRINTS
+    // ------------------------------------------------------------
+    
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'name']) &&
+             data.uid is string && data.uid.size() <= 128 &&
+             data.name is string && data.name.size() <= 300 &&
+             (data.uid == request.auth.uid || isAdmin());
+    }
+    
+    function isValidReview(data) {
+      return data.keys().hasAll(['productId', 'userId', 'rating', 'comment']) &&
+             data.productId is string && isValidId(data.productId) &&
+             data.userId == request.auth.uid &&
+             data.rating is number && data.rating >= 1 && data.rating <= 5 &&
+             data.comment is string && data.comment.size() <= 2000;
+    }
+
+    function isValidOrder(data) {
+      return data.keys().hasAll(['orderNumber', 'userId', 'total', 'status', 'items']) &&
+             data.orderNumber is string && data.orderNumber.size() >= 5 &&
+             data.total is number && data.total >= 0 &&
+             (data.userId == (isSignedIn() ? request.auth.uid : 'guest'));
+    }
+
+    // ------------------------------------------------------------
+    // COLLECTION MATCH BLOCKS
+    // ------------------------------------------------------------
+
+    match /admins/{adminId} {
+      allow get: if isOwner(adminId) || isAdmin();
+      allow list: if isSignedIn(); // Customers must find admins for notifications
+      allow create: if isHardcodedAdmin() && adminId == request.auth.uid;
+      allow update, delete: if isHardcodedAdmin() || isAdmin();
+    }
+
+    match /users/{userId} {
+      allow get: if true; 
+      allow list: if isAdmin();
+      
+      allow create: if isEmailVerified() && isValidUser(incoming()) && userId == request.auth.uid;
+      
+      allow update: if isAdmin() || (
+        isOwner(userId) && 
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'name', 'phone', 'address', 'district', 'thana', 'photoURL', 'email', 'uid', 'isBlocked',
+          'lastActive', 'referralCode', 'referredBy', 'emailVerified', 'points', 'referralRewardPaid',
+          'walletBalance'
+        ]) &&
+        // Protect points and balance from self-modification if strictly handled by cloud functions/backend
+        // Since this is a client-side app, we might allow it if we trust the user, 
+        // but let's at least ensure they don't give themselves money.
+        (existing().get('walletBalance', 0) == incoming().get('walletBalance', 0)) &&
+        (existing().get('points', 0) == incoming().get('points', 0))
+      );
+      
+      allow delete: if isAdmin() || isOwner(userId);
+
+      match /notifications/{notifId} {
+        allow read, list: if isOwner(userId) || isAdmin();
+        allow create: if isSignedIn(); 
+        allow update: if isOwner(userId) && incoming().diff(existing()).affectedKeys().hasOnly(['isRead']);
+        allow delete: if isOwner(userId) || isAdmin();
+      }
+
+      match /categoryViews/{categoryId} {
+        allow read, list: if isOwner(userId) || isAdmin();
+        allow write: if isOwner(userId);
+      }
+    }
+
+    match /products/{productId} {
+      allow read, list: if true;
+      allow create: if isAdmin();
+      allow update: if isAdmin() || (
+        // Allow public views increment and reviews sync
+        incoming().diff(existing()).affectedKeys().hasOnly(['views', 'reviewCount', 'rating'])
+      );
+      allow delete: if isAdmin();
+    }
+    
+    match /reviews/{reviewId} {
+      allow read, list: if true;
+      allow create: if isNotBlocked() && isEmailVerified() && isValidReview(incoming());
+      allow update: if isAdmin() || (
+        isSignedIn() && (
+          (isOwner(existing().userId) && incoming().diff(existing()).affectedKeys().hasOnly(['comment', 'rating'])) ||
+          (incoming().diff(existing()).affectedKeys().hasOnly(['likesCount'])) ||
+          (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['reply']))
+        )
+      );
+      allow delete: if isOwner(existing().userId) || isAdmin();
+      
+      match /likes/{userId} {
+        allow read, list: if true;
+        allow write: if isSignedIn() && userId == request.auth.uid;
+      }
+    }
+
+    match /orders/{orderId} {
+      allow get: if true; 
+      allow list: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow create: if isNotBlocked() && isValidOrder(incoming());
+      allow update: if isAdmin() || (
+        isOwner(existing().userId) && 
+        incoming().diff(existing()).affectedKeys().hasOnly(['status']) &&
+        existing().status == 'pending' // Only allow cancellation if pending
+      );
+      allow delete: if isAdmin();
+      
+      match /tracking/{trackId} {
+        allow read, list: if true;
+        allow create: if true; 
+      }
+    }
+
+    // Static content
+    match /categories/{categoryId} { allow read, list: if true; allow write: if isAdmin(); }
+    match /settings/{settingId} { allow read, list: if true; allow write: if isAdmin(); }
+    match /banners/{bannerId} { allow read, list: if true; allow write: if isAdmin(); }
+    match /coupons/{couponId} { 
+      allow read, list: if true; 
+      allow write: if isAdmin();
+    }
+
+    // Special test path
+    match /test/connection {
+      allow read: if true;
+    }
+  }
+}
